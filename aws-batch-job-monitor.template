@@ -1,0 +1,199 @@
+# aws-batch-job-monitor
+#
+# template for aws-batch-job-monitor
+# **DO NOT DELETE**
+#
+# author: midaisuk@
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: monitoring AWS Batch job status and send to CloudWatch
+
+Parameters:
+    SamplingInterval:
+        Type: Number
+        Default: 1
+        MinValue: 1
+        MaxValue: 60
+        Description: sampling interval for job status by Lambda function (1 - 60 min)
+
+Resources:
+    BatchJobMonitorRole:
+        Type: AWS::IAM::Role
+        Properties:
+            AssumeRolePolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    - 
+                        Effect: "Allow"
+                        Principal:
+                            Service:
+                                - "lambda.amazonaws.com"
+                        Action:
+                            - "sts:AssumeRole"
+            Path: "/"
+            Policies:
+                - 
+                    PolicyName: "PutCloudWatchLogs"
+                    PolicyDocument:
+                        Version: "2012-10-17"
+                        Statement:
+                            - 
+                                Effect: "Allow"
+                                Action:
+                                    - "logs:CreateLogGroup"
+                                    - "logs:CreateLogStream"
+                                    - "logs:PutLogEvents"
+                                Resource: "arn:aws:logs:*:*:*"
+                - 
+                    PolicyName: "ReadBatch"
+                    PolicyDocument:
+                        Version: "2012-10-17"
+                        Statement:
+                            - 
+                                Effect: "Allow"
+                                Action:
+                                    - "batch:DescribeJobQueues"
+                                    - "batch:DescribeJobs"
+                                    - "batch:ListJobs"
+                                Resource: "*"
+                - 
+                    PolicyName: "PutCloudWatchMetrics"
+                    PolicyDocument:
+                        Version: "2012-10-17"
+                        Statement:
+                            - 
+                                Effect: "Allow"
+                                Action:
+                                    - "cloudwatch:PutMetricData"
+                                Resource: "*"
+    
+    BatchJobMonitorLambda:
+        Type: AWS::Lambda::Function
+        Properties:
+            Description: get batch job status and send to cloudwatch metrics
+            FunctionName: !Sub "${AWS::StackName}-BatchJobMonitorLambda"
+            Handler: index.lambda_handler
+            Runtime: python3.7
+            Role: !GetAtt BatchJobMonitorRole.Arn
+            Timeout: 5
+            Code:
+                ZipFile: |
+                    # -- coding: utf-8 --
+                    
+                    import json
+                    import boto3
+                    import logging
+                    logger = logging.getLogger()
+                    logger.setLevel(logging.INFO)
+                    
+                    batch_client = boto3.client('batch')
+                    cloudwatch_client = boto3.client('cloudwatch')
+                    
+                    STATUS_LIST = ['SUBMITTED', 'PENDING', 'RUNNABLE', 'STARTING', 'RUNNING', 'SUCCEEDED', 'FAILED']
+                    METRIC_NAME_MAPPING = {
+                        'SUBMITTED': 'Job Submitted',
+                        'PENDING': 'Job Pending',
+                        'RUNNABLE': 'Job Runnable',
+                        'STARTING': 'Job Starting',
+                        'RUNNING': 'Job Running',
+                        'SUCCEEDED': 'Job Succeeded',
+                        'FAILED': 'Job Failed'
+                    }
+                    
+                    def count_job_in_queue(queue_arn):
+                        job_counter = dict()
+                        array_job_counter = dict()
+                    
+                        # initialize result array
+                        for status in STATUS_LIST:
+                            array_job_counter[status] = 0
+                    
+                        for status in STATUS_LIST:
+                            response = batch_client.list_jobs(jobQueue=queue_arn, jobStatus=status)
+                            job_counter[status] = len(response['jobSummaryList'])
+                    
+                            for job in response['jobSummaryList']:
+                                # for Array Job
+                                if 'arrayProperties' in job:
+                                    # print('array size: ', job['arrayProperties']['size'])
+                                    job_detail = batch_client.describe_jobs(jobs=[job['jobId']])
+                                    # print(job_detail['jobs'][0]['arrayProperties'])
+                                    for status in STATUS_LIST:
+                                        array_job_counter[status] += job_detail['jobs'][0]['arrayProperties']['statusSummary'][status]
+                                        
+                                # for Multi Node Job
+                                if 'nodeProperties':
+                                    # TODO
+                                    pass
+                    
+                        return job_counter, array_job_counter
+                            
+                    
+                    def put_metric_to_cloudwatch(metrics, namespace='BatchJobs'):
+                        metricdata = []
+                        
+                        for queue_name, counter in metrics.items():
+                            for status, job_count in counter['job_counter'].items():
+                                metricdata.append(
+                                    {
+                                        'MetricName': METRIC_NAME_MAPPING[status],
+                                        'Dimensions': [{'Name': 'QueueName', 'Value': queue_name}], 
+                                        'Unit': 'Count',
+                                        'Value': job_count
+                                    }
+                                )
+                    
+                            for status, job_count in counter['array_job_counter'].items():
+                                metricdata.append(
+                                    {
+                                        'MetricName': 'Array ' + METRIC_NAME_MAPPING[status],
+                                        'Dimensions': [{'Name': 'QueueName', 'Value': queue_name}], 
+                                        'Unit': 'Count',
+                                        'Value': job_count
+                                    }
+                                )
+                        
+                        logger.info(metricdata)
+                        cloudwatch_client.put_metric_data(
+                            Namespace = namespace,
+                            MetricData = metricdata
+                        )
+                    
+                    
+                    def lambda_handler(event, context):
+                        metrics = dict()
+                    
+                        # count number of jobs in each status
+                        response = batch_client.describe_job_queues()
+                        for jobqueue in response['jobQueues']:
+                            job_counter, array_job_counter = count_job_in_queue(jobqueue['jobQueueArn'])
+                            metrics[jobqueue['jobQueueName']] = {'job_counter': job_counter, 'array_job_counter': array_job_counter}
+                    
+                        # put numbers to CloudWatch
+                        put_metric_to_cloudwatch(metrics)
+                    
+                        return {
+                            'statusCode': 200,
+                            'body': json.dumps('Succeeded')
+                        }
+
+
+    
+    BatchJobMonitorInvokeRule:
+        Type: AWS::Events::Rule
+        Properties:
+            Name: !Sub "${AWS::StackName}-BatchJobMonitorRule"
+            ScheduleExpression: !Sub "cron(0/${SamplingInterval} * * * ? *)"
+            State: ENABLED
+            Targets:
+                -
+                    Arn: !GetAtt BatchJobMonitorLambda.Arn
+                    Id: "BatchJobMonitorLambda"
+                    
+    BatchJobMonitorLambdaEvent:
+        Type: "AWS::Lambda::Permission"
+        Properties:
+            Action: "lambda:InvokeFunction"
+            FunctionName: !Ref BatchJobMonitorLambda
+            Principal: "events.amazonaws.com"
+            SourceArn: !GetAtt BatchJobMonitorInvokeRule.Arn
