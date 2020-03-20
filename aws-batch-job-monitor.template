@@ -113,15 +113,13 @@ Resources:
                             job_counter[status] = len(response['jobSummaryList'])
                     
                             for job in response['jobSummaryList']:
-                                # for Array Job
+                                # for Array Jobs
                                 if 'arrayProperties' in job:
-                                    # print('array size: ', job['arrayProperties']['size'])
                                     job_detail = batch_client.describe_jobs(jobs=[job['jobId']])
-                                    # print(job_detail['jobs'][0]['arrayProperties'])
                                     for status in STATUS_LIST:
                                         array_job_counter[status] += job_detail['jobs'][0]['arrayProperties']['statusSummary'][status]
                                         
-                                # for Multi Node Job
+                                # for Multi Node Jobs
                                 if 'nodeProperties':
                                     # TODO
                                     pass
@@ -153,7 +151,7 @@ Resources:
                                     }
                                 )
                         
-                        logger.info(metricdata)
+                        logger.debug(metricdata)
                         cloudwatch_client.put_metric_data(
                             Namespace = namespace,
                             MetricData = metricdata
