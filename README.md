@@ -19,7 +19,7 @@ $ aws cloudformation create-stack --stack-name JobMonitor --template-url https:/
 
 ## TODO
 
-- monitor multi node job
-- counting vCPU
+- support multi node job
+- counting GPU requests
 
 
