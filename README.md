@@ -22,7 +22,7 @@ $ aws cloudformation create-stack --stack-name JobMonitor --template-url https:/
 - Array Job vCPUs: total amount of requested vCPUs from array job in each status[^1] in each queue
 - Array Job Memory: total amount of requested Memory from array job in each status[^1] in each queue
 
-[^1]: `SUBMITTED`, `PENDING`, `RUNNABLE`, `STARTING', 'RUNNING`, `SUCCEEDED`, `FAILED`
+[^1]: job status in `SUBMITTED`, `PENDING`, `RUNNABLE`, `STARTING', 'RUNNING` are collected. `SUCCEEDED`, `FAILED` are not collected by default.
 
 ## Screen Shots
 

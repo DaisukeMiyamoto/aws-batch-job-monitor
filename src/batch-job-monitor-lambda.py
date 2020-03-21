@@ -7,8 +7,7 @@ logger.setLevel(logging.INFO)
 batch_client = boto3.client('batch')
 cloudwatch_client = boto3.client('cloudwatch')
 
-# STATUS_LIST = ['SUBMITTED', 'PENDING', 'RUNNABLE', 'STARTING', 'RUNNING']
-STATUS_LIST = ['SUBMITTED', 'PENDING', 'RUNNABLE', 'STARTING', 'RUNNING', 'SUCCEEDED', 'FAILED']
+STATUS_LIST = ['SUBMITTED', 'PENDING', 'RUNNABLE', 'STARTING', 'RUNNING'] #['SUCCEEDED', 'FAILED']
 GET_JOB_DETAIL = True
 
 def get_job_status_in_queue(queue_arn):
