@@ -22,12 +22,24 @@ $ aws cloudformation create-stack --stack-name JobMonitor --template-url https:/
 - **Array Job vCPUs**: total amount of requested vCPUs from array job in each status(1) in each queue
 - **Array Job Memory**: total amount of requested Memory from array job in each status(1) in each queue
 
-(1): job status in `SUBMITTED`, `PENDING`, `RUNNABLE`, `STARTING', 'RUNNING` are collected. `SUCCEEDED`, `FAILED` are not collected by default.
+(1): job status in `SUBMITTED`, `PENDING`, `RUNNABLE`, `STARTING`, `RUNNING` are collected. `SUCCEEDED`, `FAILED` are not collected by default.
+
+
+## Note
+
+### Scale-out/in information of EC2 instance launched from AWS Batch
+
+You can collect information of number of instance by enabling **Auto Scaling Group group metrics**. 
+Please note that Auto Scaling Group for the each compute environment is created after first job was submitted.
+More information, see: https://docs.aws.amazon.com/ja_jp/autoscaling/ec2/userguide/as-instance-monitoring.html#as-enable-group-metrics
+
+
 
 ## Screen Shots
 
 ![JobStatusMetrics](./img/job_status_screenshot.png)
 
+(2): Instance pacacity on This dashboard is using Auto Scaling Group group metrics. Please see the Note below.
 
 ## TODO
 
