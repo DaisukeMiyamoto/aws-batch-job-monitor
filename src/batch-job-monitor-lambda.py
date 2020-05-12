@@ -95,7 +95,7 @@ def lambda_handler(event, context):
     # get number of jobs in each status in each queue
     response = batch_client.describe_job_queues()
     for jobqueue in response['jobQueues']:
-        metrics_all = {jobqueue['jobQueueName']: get_job_status_in_queue(jobqueue['jobQueueArn'])}
+        metrics_all[jobqueue['jobQueueName']] = get_job_status_in_queue(jobqueue['jobQueueArn'])
 
     # put metrics to CloudWatch
     put_metric_to_cloudwatch(metrics_all)
